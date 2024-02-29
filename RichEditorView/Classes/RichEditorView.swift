@@ -40,7 +40,7 @@ import WebKit
 private let innerLineHeight: Int = 28
 
 /// RichEditorView is a UIView that displays richly styled text, and allows it to be edited in a WYSIWYG fashion.
-@objcMembers open class RichEditorView: UIView, UIScrollViewDelegate, WKNavigationDelegate, UIGestureRecognizerDelegate {
+@objcMembers open class RichEditorView: UIView, UIScrollViewDelegate, WKNavigationDelegate, WKUIDelegate, UIGestureRecognizerDelegate {
     /// The delegate that will receive callbacks when certain actions are completed.
     open weak var delegate: RichEditorDelegate?
 
@@ -108,6 +108,9 @@ private let innerLineHeight: Int = 28
     /// The private internal tap gesture recognizer used to detect taps and focus the editor
     private let tapRecognizer = UITapGestureRecognizer()
 
+    /// Get clientHeight JavaScript code
+    private let clientHeightJs: String = "var el = document.getElementById('editor'); if (el) { el.clientHeight; }"
+
     /// The HTML that is currently loaded in the editor view, if it is loaded. If it has not been loaded yet, it is the
     /// HTML that will be loaded into the editor view once it finishes initializing.
     public var html: String = "" {
@@ -153,6 +156,7 @@ private let innerLineHeight: Int = 28
         webView.setKeyboardRequiresUserInteraction(false)
 
         webView.navigationDelegate = self
+        webView.uiDelegate = self
         webView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         webView.scrollView.isScrollEnabled = isScrollEnabled
         webView.scrollView.showsHorizontalScrollIndicator = false
@@ -221,8 +225,8 @@ private let innerLineHeight: Int = 28
 
     /// The inner height of the editor div.
     /// Fetches it from JS every time, so might be slow!
-    private func getClientHeight(handler: @escaping (Int) -> Void) {
-        runJS("document.getElementById('editor').clientHeight") { r in
+    public func getClientHeight(handler: @escaping (Int) -> Void) {
+        runJS(clientHeightJs) { r in
             if let r = Int(r) {
                 handler(r)
             } else {
@@ -241,6 +245,20 @@ private let innerLineHeight: Int = 28
     public func getText(handler: @escaping (String) -> Void) {
         runJS("RE.getText()") { r in
             handler(r)
+        }
+    }
+
+    public func getMultimedia(handler: @escaping ([String]) -> Void) {
+        runJS("RE.getMultimedia()") { r in
+            if let jsonData = r.data(using: .utf8) {
+                do {
+                    if let jsonArray = try JSONSerialization.jsonObject(with: jsonData, options: []) as? [String] {
+                        handler(jsonArray)
+                    }
+                } catch {
+                    handler([])
+                }
+            }
         }
     }
 
@@ -285,6 +303,12 @@ private let innerLineHeight: Int = 28
 
     public func setFontSize(_ size: Int) {
         runJS("RE.setFontSize('\(size)px')")
+    }
+
+    public func setEditorPadding(_ insets: UIEdgeInsets) {
+        runJS("RE.setPadding(\(insets.top), \(insets.left), \(insets.bottom), \(insets.right))")
+        let js = "var style = document.createElement('style'); style.type = 'text/css'; style.innerHTML = '.placeholder[placeholder]:after { top: \(insets.top)px !important; }'; document.head.appendChild(style);"
+        webView.evaluateJavaScript(js, completionHandler: nil)
     }
 
     public func setEditorBackgroundColor(_ color: UIColor) {
@@ -382,19 +406,43 @@ private let innerLineHeight: Int = 28
         runJS("RE.insertImage('\(url.escaped)', '\(alt.escaped)')")
     }
 
+    public func insertImage(_ url: String, alt: String, width: Int) {
+        runJS("RE.prepareInsert()")
+        runJS("RE.insertImage('\(url.escaped)', '\(alt.escaped)', \(width))")
+    }
+
+    public func insertImage(_ url: String, alt: String, width: Int, height: Int) {
+        runJS("RE.prepareInsert()")
+        runJS("RE.insertImage('\(url.escaped)', '\(alt.escaped)', \(width), \(height))")
+    }
+
     public func insertVideo(_ url: String) {
         runJS("RE.prepareInsert()")
         runJS("RE.insertVideo('\(url.escaped)')")
     }
 
+    public func insertVideo(_ url: String, width: Int) {
+        runJS("RE.prepareInsert()")
+        runJS("RE.insertVideo('\(url.escaped)', \(width))")
+    }
+
+    public func insertVideo(_ url: String, width: Int, height: Int) {
+        runJS("RE.prepareInsert()")
+        runJS("RE.insertVideo('\(url.escaped)', \(width), \(height))")
+    }
+
     public func insertLink(_ href: String, title: String) {
-        runJS("RE.prepareInsert();")
-        runJS("RE.insertLink('\(href.escaped)', '\(title.escaped)');")
+        runJS("RE.prepareInsert()")
+        runJS("RE.insertLink('\(href.escaped)', '\(title.escaped)')")
     }
 
     public func insertParagraph() {
-        runJS("RE.prepareInsert();")
-        runJS("RE.insertParagraph();")
+        runJS("RE.prepareInsert()")
+        runJS("RE.insertParagraph()")
+    }
+
+    public func setElementAttribute(_ id: String, name: String, value: String) {
+        runJS("RE.setElementAttribute('\(id.escaped)', '\(name.escaped)', '\(value.escaped)')")
     }
 
     public func focus() {
@@ -409,25 +457,13 @@ private let innerLineHeight: Int = 28
         runJS("RE.blurFocus()")
     }
 
-    public func setCheckbox() {
-        runJS("RE.setCheckbox('\(UUID().uuidString.prefix(8))')")
+    public func refresh() {
+        scrollCaretToVisible()
+        runJS("RE.getHtml()") { content in
+            self.contentHTML = content
+            self.updateHeight()
+        }
     }
-
-    // MARK: Table functionalities
-
-    public func insertTable(width: Int = 2, height: Int = 2) {
-        runJS("RE.prepareInsert()")
-        runJS("RE.insertTable(\(width), \(height))")
-    }
-
-    /// Checks if cursor is in a table element. If so, return true so that you can add menu items accordingly.
-    public func isCursorInTable() {
-        runJS("RE.isCursorInTable")
-    }
-
-    public func addRowToTable() { runJS("RE.addRowToTable()") }
-    public func deleteRowFromTable() { runJS("RE.deleteRowFromTable()") }
-    public func deleteColumnFromTable() { runJS("RE.addRowToTable()") }
 
     /// Runs some JavaScript on the WKWebView and returns the result
     /// If there is no result, returns an empty string
@@ -505,6 +541,15 @@ private let innerLineHeight: Int = 28
         return decisionHandler(WKNavigationActionPolicy.allow)
     }
 
+    // MARK: WKUIDelegate
+
+    public func webView(_ webView: WKWebView, runJavaScriptAlertPanelWithMessage message: String, initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping () -> Void) {
+        let alertView = UIAlertView(title: "提示", message: message, delegate: nil, cancelButtonTitle: "确定")
+        alertView.show()
+
+        completionHandler()
+    }
+
     // MARK: UIGestureRecognizerDelegate
 
     /// Delegate method for our UITapGestureDelegate.
@@ -546,7 +591,7 @@ private let innerLineHeight: Int = 28
     }
 
     private func updateHeight() {
-        runJS("document.getElementById('editor').clientHeight") { heightString in
+        runJS(clientHeightJs) { heightString in
             let height = Int(heightString) ?? 0
             if self.editorHeight != height {
                 self.editorHeight = height

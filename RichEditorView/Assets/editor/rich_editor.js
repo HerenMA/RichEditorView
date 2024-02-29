@@ -28,6 +28,16 @@ document.addEventListener("selectionchange", function() {
     RE.backuprange();
 });
 
+RE.isEmpty = function(param) {
+    return typeof param === 'undefined' || param === null;
+};
+
+RE.uniqueId = function() {
+    var timestamp = Date.now().toString(16);
+    var randomStr = Math.random().toString(16).substring(2);
+    return timestamp + randomStr;
+};
+
 //looks specifically for a Range selection and not a Caret selection
 RE.rangeSelectionExists = function() {
     //!! coerces a null to bool
@@ -68,7 +78,7 @@ RE.customAction = function(action) {
 
 RE.updateHeight = function() {
     RE.callback("updateHeight");
-}
+};
 
 RE.callbackQueue = [];
 RE.runCallbackQueue = function() {
@@ -95,22 +105,80 @@ RE.callback = function(method) {
 RE.setHtml = function(contents) {
     var tempWrapper = document.createElement('div');
     tempWrapper.innerHTML = contents;
-    var images = tempWrapper.querySelectorAll("img");
-
+    
+    var images = tempWrapper.querySelectorAll('img');
     for (var i = 0; i < images.length; i++) {
         images[i].onload = RE.updateHeight;
+        images[i].setAttribute('id', RE.uniqueId());
+        images[i].setAttribute('source-src', images[i].src);
+        RE.customAction('presienedURL|' + images[i].id + '|' + images[i].src);
+    }
+    
+    var videos = tempWrapper.querySelectorAll('video');
+    for (var i = 0; i < videos.length; i++) {
+        videos[i].onload = RE.updateHeight;
+        videos[i].setAttribute('id', RE.uniqueId());
+        videos[i].setAttribute('source-src', videos[i].src);
+        videos[i].setAttribute('playsinline', 'true');
+        videos[i].setAttribute('webkit-playsinline', 'true');
+        videos[i].setAttribute('controls', 'controls');
+        videos[i].setAttribute('preload', 'auto');
+        RE.customAction('presienedURL|' + videos[i].id + '|' + videos[i].src);
     }
 
     RE.editor.innerHTML = tempWrapper.innerHTML;
     RE.updatePlaceholder();
 };
 
+RE.getTempWrapper = function() {
+    var tempWrapper = document.createElement('div');
+    tempWrapper.innerHTML = RE.editor.innerHTML;
+    
+    var images = tempWrapper.querySelectorAll('img');
+    for (var i = 0; i < images.length; i++) {
+        var sourceSrc = images[i].getAttribute('source-src');
+        images[i].src = sourceSrc;
+        images[i].removeAttribute('id');
+        images[i].removeAttribute('source-src');
+    }
+    
+    var videos = tempWrapper.querySelectorAll('video');
+    for (var i = 0; i < videos.length; i++) {
+        var sourceSrc = videos[i].getAttribute('source-src');
+        videos[i].src = sourceSrc;
+        videos[i].removeAttribute('id');
+        videos[i].removeAttribute('source-src');
+        videos[i].removeAttribute('playsinline');
+        videos[i].removeAttribute('webkit-playsinline');
+        videos[i].removeAttribute('preload');
+    }
+    
+    return tempWrapper;
+};
+
 RE.getHtml = function() {
-    return RE.editor.innerHTML;
+    return RE.getTempWrapper().innerHTML;
 };
 
 RE.getText = function() {
-    return RE.editor.innerText;
+    return RE.getTempWrapper().innerText;
+};
+
+RE.getMultimedia = function() {
+    var tempWrapper = RE.getTempWrapper();
+    var multimedia = [];
+    
+    var images = tempWrapper.querySelectorAll('img');
+    for (var i = 0; i < images.length; i++) {
+        multimedia.push(images[i].src);
+    }
+    
+    var videos = tempWrapper.querySelectorAll('video');
+    for (var i = 0; i < videos.length; i++) {
+        multimedia.push(videos[i].src);
+    }
+    
+    return JSON.stringify(multimedia);
 };
 
 RE.setBaseTextColor = function(color) {
@@ -118,14 +186,14 @@ RE.setBaseTextColor = function(color) {
 };
 
 RE.setPlaceholderText = function(text) {
-    RE.editor.setAttribute("placeholder", text);
+    RE.editor.setAttribute('placeholder', text);
 };
 
 RE.updatePlaceholder = function() {
     if (RE.editor.innerHTML.indexOf('img') !== -1 || RE.editor.innerHTML.indexOf('video') !== -1 || (RE.editor.textContent.length > 0 && RE.editor.innerHTML.length > 0)) {
-        RE.editor.classList.remove("placeholder");
+        RE.editor.classList.remove('placeholder');
     } else {
-        RE.editor.classList.add("placeholder");
+        RE.editor.classList.add('placeholder');
     }
 };
 
@@ -135,6 +203,13 @@ RE.removeFormat = function() {
 
 RE.setFontSize = function(size) {
     RE.editor.style.fontSize = size;
+};
+
+RE.setPadding = function(top, left, bottom, right) {
+    RE.editor.style.paddingTop = top + 'px';
+    RE.editor.style.paddingLeft = left + 'px';
+    RE.editor.style.paddingBottom = bottom + 'px';
+    RE.editor.style.paddingRight = right + 'px';
 };
 
 RE.setBackgroundColor = function(color) {
@@ -179,16 +254,16 @@ RE.setUnderline = function() {
 
 RE.setTextColor = function(color) {
     RE.restorerange();
-    document.execCommand("styleWithCSS", null, true);
+    document.execCommand('styleWithCSS', null, true);
     document.execCommand('foreColor', false, color);
-    document.execCommand("styleWithCSS", null, false);
+    document.execCommand('styleWithCSS', null, false);
 };
 
 RE.setTextBackgroundColor = function(color) {
     RE.restorerange();
-    document.execCommand("styleWithCSS", null, true);
+    document.execCommand('styleWithCSS', null, true);
     document.execCommand('hiliteColor', false, color);
-    document.execCommand("styleWithCSS", null, false);
+    document.execCommand('styleWithCSS', null, false);
 };
 
 RE.setHeading = function(heading) {
@@ -197,7 +272,7 @@ RE.setHeading = function(heading) {
 
 RE.setEditorTag = function(tag){
     document.execCommand('formatBlock', false, '<' + tag + '>');
-}
+};
 
 RE.setIndent = function() {
     document.execCommand('indent', false, null);
@@ -236,30 +311,69 @@ RE.setLineHeight = function(height) {
 };
 
 RE.insertImage = function(url, alt) {
-    var img = document.createElement('img');
-    img.setAttribute("src", url);
-    img.setAttribute("alt", alt);
-    img.onload = RE.updateHeight;
+    RE.insertImage(url, alt, null);
+};
 
-    RE.insertHTML(img.outerHTML);
+RE.insertImage = function(url, alt, width) {
+    RE.insertImage(url, alt, width, null);
+};
+
+RE.insertImage = function(url, alt, width, height) {
+    var image = document.createElement('img');
+    image.setAttribute('id', RE.uniqueId());
+    image.setAttribute('src', url);
+    image.setAttribute('source-src', url);
+    image.setAttribute('alt', alt);
+    if (RE.isEmpty(width) == false) {
+        image.setAttribute('width', width);
+    }
+    if (RE.isEmpty(height) == false) {
+        image.setAttribute('height', height);
+    }
+    image.onload = function() {
+        RE.callback("input");
+    }
+
+    RE.insertHTML(image.outerHTML);
+    RE.customAction('presienedURL|' + image.id + '|' + image.src);
     RE.callback("input");
 };
 
 RE.insertVideo = function(url) {
+    RE.insertVideo(url, null);
+};
+
+RE.insertVideo = function(url, width) {
+    RE.insertVideo(url, width, null);
+};
+
+RE.insertVideo = function(url, width, height) {
     var video = document.createElement('video');
-    video.setAttribute("src", url);
-    video.setAttribute("playsinline", 'true');
-    video.setAttribute("webkit-playsinline", 'true');
-    video.setAttribute("controls", 'controls');
-    video.setAttribute("preload", 'auto');
+    video.setAttribute('id', RE.uniqueId());
+    video.setAttribute('src', url);
+    video.setAttribute('source-src', url);
+    if (RE.isEmpty(width) == false) {
+        video.setAttribute('width', width);
+    }
+    if (RE.isEmpty(height) == false) {
+        video.setAttribute('height', height);
+    }
+    video.setAttribute('playsinline', 'true');
+    video.setAttribute('webkit-playsinline', 'true');
+    video.setAttribute('controls', 'controls');
+    video.setAttribute('preload', 'auto');
+    video.onload = function() {
+        RE.callback("input");
+    }
     
-    RE.insertHTML("<div>" + video.outerHTML + "</div>&nbsp;");
+    RE.insertHTML(video.outerHTML);
+    RE.customAction('presienedURL|' + video.id + '|' + video.src);
     RE.callback("input");
-}
+};
 
 RE.insertParagraph = function() {
     document.execCommand('insertParagraph', false, null);
-}
+};
 
 RE.setBlockquote = function() {
     document.execCommand('formatBlock', false, '<blockquote>');
@@ -275,16 +389,16 @@ RE.insertLink = function(url, title) {
     var sel = document.getSelection();
     if (sel.toString().length == 0) {
         var el = document.createElement('a');
-        el.setAttribute("href", url);
-        el.setAttribute("title", title);
+        el.setAttribute('href', url);
+        el.setAttribute('title', title);
         el.innerHTML = title;
         
         RE.insertHTML(el.outerHTML);
     } else {
         if (sel.rangeCount) {
             var el = document.createElement("a");
-            el.setAttribute("href", url);
-            el.setAttribute("title", title);
+            el.setAttribute('href', url);
+            el.setAttribute('title', title);
 
             var range = sel.getRangeAt(0).cloneRange();
             range.surroundContents(el);
@@ -293,6 +407,13 @@ RE.insertLink = function(url, title) {
         }
     }
     RE.callback("input");
+};
+
+RE.setElementAttribute = function(id, name, value) {
+    var el = document.getElementById(id);
+    if (el) {
+        el.setAttribute(name, value);
+    }
 };
 
 RE.prepareInsert = function() {
@@ -391,6 +512,13 @@ RE.getAnchorTagsInNode = function(node) {
 
 RE.countAnchorTagsInNode = function(node) {
     return RE.getAnchorTagsInNode(node).length;
+};
+
+RE.selectedText = function() {
+    if (RE.rangeSelectionExists() == true) {
+        return document.getSelection().toString();
+    }
+    return "";
 };
 
 /**

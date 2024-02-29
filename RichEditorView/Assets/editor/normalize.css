@@ -182,8 +182,13 @@ sub {
  * Remove border when inside `a` element in IE 8/9/10.
  */
 
-img {
+img, video {
   border: 0;
+  height: auto !important;
+}
+
+video {
+  box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
 }
 
 /**

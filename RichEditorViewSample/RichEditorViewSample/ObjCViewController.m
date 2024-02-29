@@ -87,14 +87,13 @@ UIKIT_EXTERN API_AVAILABLE(ios(14.0)) API_UNAVAILABLE(watchos, tvos) NS_SWIFT_UI
          for (NSInteger i = 0; i < items.count; i++) {
              UIAlertAction *action = [UIAlertAction actionWithTitle:items[i] style:UIAlertActionStyleDefault handler:^(UIAlertAction *_Nonnull action) {
                                           if ([action.title isEqualToString:@"图片"]) {
-                                              [toolbar.editor insertImage:@"https://img2.baidu.com/it/u=1898128106,2722598876&fm=253" alt:@""];
+                                              [toolbar.editor insertImage:@"https://img2.baidu.com/it/u=1898128106,2722598876&fm=253" alt:@"" width:320];
                                           } else if ([action.title isEqualToString:@"视频"]) {
-                                              [toolbar.editor insertVideo:@"https://www.w3school.com.cn/example/html5/mov_bbb.mp4"];
+                                              [toolbar.editor insertVideo:@"https://www.w3school.com.cn/example/html5/mov_bbb.mp4" width:360];
                                               [toolbar.editor insertParagraph];
                                           } else if ([action.title isEqualToString:@"链接"]) {
                                               [toolbar.editor insertLink:@"http://github.com/cjwirth/RichEditorView" title:@"Github Link"];
                                           }
-
                                       }];
              [alertController addAction:action];
          }
